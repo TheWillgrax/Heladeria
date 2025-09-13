@@ -39,9 +39,21 @@ const dbConfig = {
 };
 
 if (process.env.DB_SSL_CA) {
-  dbConfig.ssl = {
-    ca: fs.readFileSync(process.env.DB_SSL_CA)
-  };
+  try {
+    if (fs.existsSync(process.env.DB_SSL_CA)) {
+      dbConfig.ssl = {
+        ca: fs.readFileSync(process.env.DB_SSL_CA)
+      };
+    } else {
+      console.warn(
+        `Archivo de certificado no encontrado en ${process.env.DB_SSL_CA}. Continuando sin SSL.`
+      );
+    }
+  } catch (error) {
+    console.warn(
+      `No se pudo cargar el certificado SSL: ${error.message}. Continuando sin SSL.`
+    );
+  }
 }
 
 const pool = mysql.createPool(dbConfig);
