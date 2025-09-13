@@ -26,17 +26,25 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Conexión a la base de datos
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '1234',
-  database: process.env.DB_NAME || 'heladeria_db',
+const dbConfig = {
+  host: process.env.DB_HOST || 'gateway01-us-east-1.prod.aws.tidbcloud.com',
+  port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 4000,
+  user: process.env.DB_USER || '9fPFVz5f8RypaAun.root',
+  password: process.env.DB_PASSWORD || 'RhjlbnZE4akmMMZLr',
+  database: process.env.DB_NAME || 'heladeria_cdb',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
   charset: 'utf8mb4'
-});
+};
+
+if (process.env.DB_SSL_CA) {
+  dbConfig.ssl = {
+    ca: fs.readFileSync(process.env.DB_SSL_CA)
+  };
+}
+
+const pool = mysql.createPool(dbConfig);
 
 // Middleware para verificar autenticación y rol de administrador
 const requireAdmin = async (req, res, next) => {
