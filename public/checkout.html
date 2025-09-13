@@ -141,7 +141,13 @@ checkout.html — Página de Checkout Heladería Victoria
         const res = await fetch('/api/checkout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items })
+          body: JSON.stringify({
+            customer_name: name,
+            customer_email: email,
+            customer_address: address,
+            payment_method: payment,
+            items
+          })
         });
         const data = await res.json();
 
