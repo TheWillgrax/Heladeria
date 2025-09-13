@@ -783,29 +783,48 @@ async function deleteProduct(productId) {
 // Ver detalles del pedido (solo lectura)
 async function viewOrder(orderId) {
   const { token } = getAuth();
-  
+
   try {
     const res = await fetch(`/api/orders/${orderId}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    
+
     if (res.ok) {
       const order = await res.json();
-      
-      // Mostrar detalles del pedido en un modal
+
+      const itemsText = order.items
+        .map(it => `${it.name} x${it.quantity} - Q${(it.price * it.quantity).toFixed(2)}`)
+        .join('\n');
+
       openModal(
         `Detalles del Pedido #${order.id}`,
         [
+          { name: 'customer', label: 'Cliente', type: 'text', value: order.customer.name, readonly: true },
+          { name: 'email', label: 'Email', type: 'text', value: order.customer.email, readonly: true },
+          { name: 'date', label: 'Fecha', type: 'text', value: new Date(order.created_at).toLocaleDateString(), readonly: true },
           { name: 'status', label: 'Estado', type: 'text', value: order.status, readonly: true },
           { name: 'total', label: 'Total', type: 'text', value: `Q${order.total}`, readonly: true },
-          { name: 'date', label: 'Fecha', type: 'text', value: new Date(order.created_at).toLocaleDateString(), readonly: true },
-          { name: 'items', label: 'Items', type: 'text', value: order.items_count || 'N/A', readonly: true }
+          { name: 'items', label: 'Productos', type: 'textarea', value: itemsText, readonly: true, rows: Math.min(order.items.length + 1, 10) }
         ],
         () => {
-          // No hacer nada al submit (solo lectura)
-          closeModal();
+          const invoiceData = {
+            orderId: order.id,
+            createdAt: order.created_at,
+            customer: {
+              name: order.customer.name,
+              email: order.customer.email,
+              address: order.customer.address || '',
+            },
+            items: order.items,
+          };
+          localStorage.setItem('lastOrder', JSON.stringify(invoiceData));
+          window.open('/factura.html', '_blank');
         }
       );
+
+      const modal = document.getElementById('edit-modal');
+      const submitBtn = modal.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.textContent = 'Descargar factura';
     } else {
       alert('Error al obtener detalles del pedido');
     }

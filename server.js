@@ -710,7 +710,7 @@ app.post('/api/checkout', async (req, res) => {
 app.get('/api/orders', async (req, res) => {
   try {
     const [rows] = await pool.query(`
-      SELECT o.*, 
+      SELECT o.*,
              COUNT(oi.id) as items_count,
              SUM(oi.quantity) as total_items
       FROM orders o
@@ -718,13 +718,64 @@ app.get('/api/orders', async (req, res) => {
       GROUP BY o.id
       ORDER by o.created_at DESC
     `);
-    
+
     res.json(rows);
   } catch (e) {
     console.error('Error en /api/orders:', e);
-    res.status(500).json({ 
+    res.status(500).json({
       error: e.message,
-      message: 'Error al obtener las órdenes' 
+      message: 'Error al obtener las órdenes'
+    });
+  }
+});
+
+app.get('/api/orders/:id', async (req, res) => {
+  try {
+    const orderId = req.params.id;
+
+    const [orderRows] = await pool.query(
+      `SELECT o.*, u.name AS customer_name, u.email AS customer_email, u.address AS customer_address
+       FROM orders o
+       LEFT JOIN users u ON o.user_id = u.id
+       WHERE o.id = ?`,
+      [orderId]
+    );
+
+    if (orderRows.length === 0) {
+      return res.status(404).json({ message: 'Orden no encontrada' });
+    }
+
+    const order = orderRows[0];
+
+    const [items] = await pool.query(
+      `SELECT oi.quantity, p.name, p.price
+       FROM order_items oi
+       JOIN products p ON oi.product_id = p.id
+       WHERE oi.order_id = ?`,
+      [orderId]
+    );
+
+    res.json({
+      id: order.id,
+      status: order.status,
+      total: Number(order.total),
+      created_at: order.created_at,
+      customer: {
+        name: order.customer_name,
+        email: order.customer_email,
+        address: order.customer_address,
+      },
+      items: items.map(it => ({
+        name: it.name,
+        price: Number(it.price),
+        quantity: it.quantity,
+      })),
+    });
+  } catch (e) {
+    console.error('Error en /api/orders/:id:', e);
+    res.status(500).json({
+      error: e.message,
+      message: 'Error al obtener la orden',
     });
   }
 });
