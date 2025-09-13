@@ -96,7 +96,8 @@ function renderProducts(products) {
   products.forEach(product => {
     const productCard = document.createElement('div');
     productCard.className = 'product-card';
-    productCard.dataset.id = `producto-${product.id}`;
+    // Store the numeric ID to ensure backend compatibility during checkout
+    productCard.dataset.id = String(product.id);
     productCard.dataset.category = product.category_id;
     productCard.dataset.price = product.price;
     
