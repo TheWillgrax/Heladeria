@@ -393,13 +393,19 @@ function openModal(title, fields, onSubmit, editId = null, editType = null) {
         if (option.value === field.value) opt.selected = true;
         input.appendChild(opt);
       });
+    } else if (field.type === 'textarea') {
+      input = document.createElement('textarea');
+      input.value = field.value || '';
+      if (field.rows) input.rows = field.rows;
+      if (field.readonly) input.readOnly = true;
     } else {
       input = document.createElement('input');
       input.type = field.type || 'text';
-      input.value = field.value || '';
-      if (field.readonly) {
-        input.readOnly = true;
+      if (field.type !== 'file') {
+        input.value = field.value || '';
       }
+      if (field.readonly) input.readOnly = true;
+      if (field.accept) input.accept = field.accept;
     }
     
     input.id = `modal-${field.name}`;
@@ -621,6 +627,71 @@ async function deleteUser(userId) {
 }
 
 // Funciones para manipular productos
+const btnAddProduct = document.getElementById('btn-add-product');
+if (btnAddProduct) {
+  btnAddProduct.addEventListener('click', () => addProduct());
+}
+
+async function addProduct() {
+  const { token } = getAuth();
+
+  // Obtener categorías para el select
+  let categories = [];
+  try {
+    const catRes = await fetch('/api/categories', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (catRes.ok) {
+      categories = await catRes.json();
+    }
+  } catch (err) {
+    console.error('Error al cargar categorías:', err);
+  }
+
+  openModal(
+    'Agregar Producto',
+    [
+      { name: 'name', label: 'Nombre', type: 'text', required: true },
+      { name: 'description', label: 'Descripción', type: 'textarea' },
+      { name: 'price', label: 'Precio', type: 'number', required: true },
+      { name: 'stock', label: 'Stock', type: 'number', required: true },
+      {
+        name: 'category_id',
+        label: 'Categoría',
+        type: 'select',
+        options: [
+          { value: '', text: 'Seleccionar categoría' },
+          ...categories.map(cat => ({ value: cat.id, text: cat.name }))
+        ]
+      },
+      { name: 'image', label: 'Imagen', type: 'file', required: true, accept: 'image/*' }
+    ],
+    async (data) => {
+      const formData = new FormData();
+      formData.append('name', data.name);
+      if (data.description) formData.append('description', data.description);
+      formData.append('price', data.price);
+      formData.append('stock', data.stock);
+      if (data.category_id) formData.append('category_id', data.category_id);
+      if (data.image) formData.append('image', data.image);
+
+      const res = await fetch('/api/products', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
+
+      if (res.ok) {
+        alert('Producto creado correctamente');
+        loadProducts();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || 'Error al crear el producto');
+      }
+    }
+  );
+}
+
 async function editProduct(productId) {
   const { token } = getAuth();
   
