@@ -560,13 +560,28 @@ app.delete('/api/cart/items/:product_id', (req, res) => {
 // --- Checkout ---
 app.post('/api/checkout', async (req, res) => {
   const sid = getSessionId(req);
-  const cart = carts.get(sid);
+  let cart = carts.get(sid);
   const user_id = null; // En una app real, obtendrías el user_id de la sesión o token
-  
+
+  // Permitir que los items lleguen directamente en el cuerpo de la petición
   if (!cart || !cart.items.length) {
-    return res.status(400).json({ 
+    if (Array.isArray(req.body.items) && req.body.items.length > 0) {
+      cart = {
+        items: req.body.items.map(i => ({
+          product_id: i.product_id || i.id,
+          name: i.name,
+          price: Number(i.price) || 0,
+          quantity: Number(i.quantity) || 0
+        }))
+      };
+      cart.total = cart.items.reduce((sum, it) => sum + it.price * it.quantity, 0);
+    }
+  }
+
+  if (!cart || !cart.items.length) {
+    return res.status(400).json({
       error: 'Carrito vacío',
-      message: 'No hay items en el carrito' 
+      message: 'No hay items en el carrito'
     });
   }
   

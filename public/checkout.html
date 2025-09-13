@@ -87,72 +87,74 @@ checkout.html — Página de Checkout Heladería Victoria
   <script>
     // Renderizar carrito en checkout
     function renderCheckoutCart() {
-      const cart = JSON.parse(localStorage.getItem("cart_items") || "[]");
-      const tbody = document.getElementById("checkout-cart-body");
-      const totalEl = document.getElementById("checkout-total");
+      const cart = JSON.parse(localStorage.getItem('heladeriaCart') || '[]');
+      const tbody = document.getElementById('checkout-cart-body');
+      const totalEl = document.getElementById('checkout-total');
 
       if (!cart.length) {
         tbody.innerHTML = '<tr><td colspan="4">Tu carrito está vacío</td></tr>';
-        totalEl.textContent = "Q0.00";
+        totalEl.textContent = 'Q0.00';
         return;
       }
 
       let total = 0;
-      tbody.innerHTML = "";
+      tbody.innerHTML = '';
       cart.forEach(item => {
-        const subtotal = item.price * item.qty;
+        const subtotal = item.price * item.quantity;
         total += subtotal;
-        tbody.insertAdjacentHTML("beforeend", `
+        tbody.insertAdjacentHTML('beforeend', `
           <tr>
             <td>${item.name}</td>
-            <td>${item.qty}</td>
+            <td>${item.quantity}</td>
             <td>Q${item.price.toFixed(2)}</td>
             <td>Q${subtotal.toFixed(2)}</td>
           </tr>
         `);
       });
 
-      totalEl.textContent = "Q" + total.toFixed(2);
+      totalEl.textContent = 'Q' + total.toFixed(2);
     }
 
     // Manejar envío del formulario
-    document.getElementById("checkout-form").addEventListener("submit", async (e) => {
+    document.getElementById('checkout-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const name = document.getElementById("name").value;
-      const email = document.getElementById("email").value;
-      const address = document.getElementById("address").value;
-      const payment = document.getElementById("payment-method").value;
-      const cart = JSON.parse(localStorage.getItem("cart_items") || "[]");
+      const name = document.getElementById('name').value;
+      const email = document.getElementById('email').value;
+      const address = document.getElementById('address').value;
+      const payment = document.getElementById('payment-method').value;
+      const cart = JSON.parse(localStorage.getItem('heladeriaCart') || '[]');
 
       if (!cart.length) {
-        alert("Tu carrito está vacío.");
+        alert('Tu carrito está vacío.');
         return;
       }
 
-      const order = {
-        customer: { name, email, address, payment },
-        items: cart
-      };
+      // Preparar items para el backend
+      const items = cart.map(i => ({
+        id: i.id,
+        name: i.name,
+        price: i.price,
+        quantity: i.quantity
+      }));
 
       try {
-        // 🔗 Llamada a tu backend (Node/Express → MySQL)
-        const res = await fetch("/api/pedido-completo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(order)
+        const res = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items })
         });
         const data = await res.json();
 
         if (res.ok) {
-          alert("✅ Pedido realizado con éxito. ¡Gracias por tu compra!");
-          localStorage.removeItem("cart_items");
-          window.location.href = "/factura.html"; // Redirige a factura
+          alert('✅ Pedido realizado con éxito. ¡Gracias por tu compra!');
+          localStorage.removeItem('heladeriaCart');
+          window.location.href = '/factura.html';
         } else {
-          alert("❌ Error al procesar el pedido: " + data.error);
+          alert('❌ Error al procesar el pedido: ' + data.error);
         }
       } catch (err) {
         console.error(err);
-        alert("❌ No se pudo conectar con el servidor.");
+        alert('❌ No se pudo conectar con el servidor.');
       }
     });
 
