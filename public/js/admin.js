@@ -70,6 +70,25 @@ const viewMap = {
   '#config': { el: '#view-config', icon: 'fa-sliders', title: 'Configuración' },
 };
 
+let configInitialized = false;
+function initConfig() {
+  if (configInitialized) return;
+  configInitialized = true;
+  const btn = document.getElementById('btn-toggle-theme');
+  if (!btn) return;
+  const updateBtn = () => {
+    const theme = localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
+    btn.innerHTML = theme === 'dark'
+      ? '<i class="fas fa-sun"></i> Tema claro'
+      : '<i class="fas fa-moon"></i> Tema oscuro';
+  };
+  updateBtn();
+  btn.addEventListener('click', () => {
+    window.toggleTheme && window.toggleTheme();
+    updateBtn();
+  });
+}
+
 function showView(hash) {
   const { user } = getAuth();
   const view = viewMap[hash] || viewMap['#perfil'];
@@ -102,6 +121,8 @@ function showView(hash) {
     loadProducts();
   } else if (hash === '#pedidos') {
     loadOrders();
+  } else if (hash === '#config') {
+    initConfig();
   }
 }
 

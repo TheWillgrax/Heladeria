@@ -27,6 +27,16 @@
   --container-max: 1200px;
 }
 
+/* Tema oscuro */
+body.dark-theme {
+  --color-bg: #1a1a1a;
+  --color-light: #2c2c2c;
+  --color-dark: #f5f5f5;
+  --color-secondary-bg: rgba(255,107,139,0.2);
+  --color-text-muted: #bbbbbb;
+  --color-text-light: #f5f5f5;
+}
+
 
 /* BASE */
 * {

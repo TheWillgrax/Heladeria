@@ -16,9 +16,25 @@
   window.addEventListener("pageshow", (e) => { 
     if (e.persisted) window.scrollTo(0, 0); 
   });
-  window.addEventListener("beforeunload", () => { 
-    window.scrollTo(0, 0); 
+  window.addEventListener("beforeunload", () => {
+    window.scrollTo(0, 0);
   });
+
+  const THEME_KEY = 'theme';
+
+  function applyTheme(theme) {
+    document.body.classList.toggle('dark-theme', theme === 'dark');
+  }
+
+  function toggleTheme() {
+    const current = localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
+    const next = current === 'dark' ? 'light' : 'dark';
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+    return next;
+  }
+
+  window.toggleTheme = toggleTheme;
 
 // --------------------------------------------------------------------------
 // Plantilla del Header con lógica de autenticación
@@ -148,16 +164,20 @@ const headerHTML = `
     // Hacer el header sticky/fixed
     applyHeaderStickyOnly();
 
+    // Aplicar tema almacenado
+    const savedTheme = localStorage.getItem(THEME_KEY) || 'light';
+    applyTheme(savedTheme);
+
     // Señal de que el layout está listo para otros scripts
     document.dispatchEvent(new CustomEvent("layout:ready"));
 
     // Forzar scroll al inicio tras la carga
     setTimeout(() => {
-      try { 
-        window.scrollTo({ top: 0, left: 0, behavior: "auto" }); 
+      try {
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
       }
-      catch { 
-        window.scrollTo(0, 0); 
+      catch {
+        window.scrollTo(0, 0);
       }
     }, 20);
   });
