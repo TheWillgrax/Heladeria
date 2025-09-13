@@ -27,7 +27,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Conexión a la base de datos
 const dbConfig = {
-  host: process.env.DB_HOST || 'gateway01-us-east-1.prod.aws.tidbcloud.com',
+  // Corrección de host: el subdominio usa punto en lugar de guion
+  host: process.env.DB_HOST || 'gateway01.us-east-1.prod.aws.tidbcloud.com',
   port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 4000,
   user: process.env.DB_USER || '9fPFVz5f8RypaAun.root',
   password: process.env.DB_PASSWORD || 'RhjlbnZE4akmMMZLr',
