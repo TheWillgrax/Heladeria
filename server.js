@@ -413,6 +413,18 @@ function getSessionId(req) {
   return req.headers['x-session-id'] || req.cookies?.sessionId || req.ip;
 }
 
+// Normalizar un identificador de producto que puede venir como número o string
+function normalizeProductId(id) {
+  if (typeof id === 'number') return id;
+  if (typeof id === 'string') {
+    const match = id.match(/\d+/);
+    if (match) {
+      return Number(match[0]);
+    }
+  }
+  return NaN;
+}
+
 app.get('/api/cart', (req, res) => {
   const sid = getSessionId(req);
   res.json(carts.get(sid) || { items: [], total: 0 });
@@ -422,18 +434,19 @@ app.post('/api/cart/items', async (req, res) => {
   try {
     const sid = getSessionId(req);
     const { product_id, quantity = 1 } = req.body;
-    
-    if (!product_id) {
-      return res.status(400).json({ 
+    const parsedId = normalizeProductId(product_id);
+
+    if (!product_id || !Number.isInteger(parsedId)) {
+      return res.status(400).json({
         error: 'Datos incompletos',
-        message: 'El product_id es requerido' 
+        message: 'El product_id es requerido y debe ser numérico'
       });
     }
-    
+
     // Verificar que el producto existe
     const [rows] = await pool.query(
       'SELECT id, name, price, image_url, stock FROM products WHERE id = ? AND active = 1',
-      [product_id]
+      [parsedId]
     );
     
     if (!rows.length) {
@@ -454,7 +467,7 @@ app.post('/api/cart/items', async (req, res) => {
     }
     
     const cart = carts.get(sid) || { items: [] };
-    const existingItemIndex = cart.items.findIndex(i => i.product_id == product_id);
+    const existingItemIndex = cart.items.findIndex(i => i.product_id == parsedId);
     
     if (existingItemIndex >= 0) {
       // Actualizar cantidad si el producto ya está en el carrito
@@ -462,7 +475,7 @@ app.post('/api/cart/items', async (req, res) => {
     } else {
       // Agregar nuevo item al carrito
       cart.items.push({
-        product_id,
+        product_id: parsedId,
         name: product.name,
         price: Number(product.price),
         image_url: product.image_url,
@@ -488,24 +501,32 @@ app.patch('/api/cart/items/:product_id', (req, res) => {
   try {
     const sid = getSessionId(req);
     const { quantity } = req.body;
-    
+    const parsedId = normalizeProductId(req.params.product_id);
+
     if (quantity == null || quantity < 0) {
       return res.status(400).json({
         error: 'Cantidad inválida',
         message: 'La cantidad debe ser un número positivo'
       });
     }
-    
-    const cart = carts.get(sid) || { items: [] };
-    const itemIndex = cart.items.findIndex(i => i.product_id == req.params.product_id);
-    
-    if (itemIndex === -1) {
-      return res.status(404).json({ 
-        error: 'Item no encontrado',
-        message: 'El item no existe en el carrito' 
+
+    if (!Number.isInteger(parsedId)) {
+      return res.status(400).json({
+        error: 'ID inválido',
+        message: 'El product_id debe ser numérico'
       });
     }
-    
+
+    const cart = carts.get(sid) || { items: [] };
+    const itemIndex = cart.items.findIndex(i => i.product_id == parsedId);
+
+    if (itemIndex === -1) {
+      return res.status(404).json({
+        error: 'Item no encontrado',
+        message: 'El item no existe en el carrito'
+      });
+    }
+
     if (quantity === 0) {
       // Eliminar item si la cantidad es 0
       cart.items.splice(itemIndex, 1);
@@ -513,17 +534,17 @@ app.patch('/api/cart/items/:product_id', (req, res) => {
       // Actualizar cantidad
       cart.items[itemIndex].quantity = Number(quantity);
     }
-    
+
     // Calcular total
     cart.total = cart.items.reduce((total, item) => total + (item.price * item.quantity), 0);
-    
+
     carts.set(sid, cart);
     res.json(cart);
   } catch (e) {
     console.error('Error en PATCH /api/cart/items/:product_id:', e);
-    res.status(500).json({ 
+    res.status(500).json({
       error: e.message,
-      message: 'Error al actualizar el carrito' 
+      message: 'Error al actualizar el carrito'
     });
   }
 });
@@ -531,28 +552,36 @@ app.patch('/api/cart/items/:product_id', (req, res) => {
 app.delete('/api/cart/items/:product_id', (req, res) => {
   try {
     const sid = getSessionId(req);
+    const parsedId = normalizeProductId(req.params.product_id);
     const cart = carts.get(sid) || { items: [] };
-    
-    const initialLength = cart.items.length;
-    cart.items = cart.items.filter(i => i.product_id != req.params.product_id);
-    
-    if (initialLength === cart.items.length) {
-      return res.status(404).json({ 
-        error: 'Item no encontrado',
-        message: 'El item no existe en el carrito' 
+
+    if (!Number.isInteger(parsedId)) {
+      return res.status(400).json({
+        error: 'ID inválido',
+        message: 'El product_id debe ser numérico'
       });
     }
-    
+
+    const initialLength = cart.items.length;
+    cart.items = cart.items.filter(i => i.product_id != parsedId);
+
+    if (initialLength === cart.items.length) {
+      return res.status(404).json({
+        error: 'Item no encontrado',
+        message: 'El item no existe en el carrito'
+      });
+    }
+
     // Calcular total
     cart.total = cart.items.reduce((total, item) => total + (item.price * item.quantity), 0);
-    
+
     carts.set(sid, cart);
     res.json(cart);
   } catch (e) {
     console.error('Error en DELETE /api/cart/items/:product_id:', e);
-    res.status(500).json({ 
+    res.status(500).json({
       error: e.message,
-      message: 'Error al eliminar item del carrito' 
+      message: 'Error al eliminar item del carrito'
     });
   }
 });
@@ -582,7 +611,7 @@ app.post('/api/checkout', async (req, res) => {
     if (Array.isArray(req.body.items) && req.body.items.length > 0) {
       cart = {
         items: req.body.items.map(i => ({
-          product_id: i.product_id || i.id,
+          product_id: normalizeProductId(i.product_id ?? i.id),
           name: i.name,
           price: Number(i.price) || 0,
           quantity: Number(i.quantity) || 0
@@ -605,6 +634,11 @@ app.post('/api/checkout', async (req, res) => {
 
     // Verificar stock nuevamente antes de procesar la orden y obtener info del producto
     for (const item of cart.items) {
+      item.product_id = normalizeProductId(item.product_id);
+      if (!Number.isInteger(item.product_id)) {
+        throw new Error(`ID de producto inválido: ${item.product_id}`);
+      }
+
       const [rows] = await conn.query(
         'SELECT name, price, stock FROM products WHERE id = ?',
         [item.product_id]
