@@ -1,0 +1,30 @@
+.invoice-container {
+  max-width: 800px;
+  margin: 2rem auto;
+  background: var(--color-light);
+  padding: 2rem;
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.invoice-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+.invoice-table th,
+.invoice-table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+}
+
+.invoice-total {
+  text-align: right;
+  font-weight: bold;
+  margin-top: 1rem;
+}
+
+#download-invoice {
+  margin-top: 1.5rem;
+}
