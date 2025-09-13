@@ -630,8 +630,8 @@ app.post('/api/checkout', async (req, res) => {
 
     // Crear la orden
     const [orderResult] = await conn.query(
-      'INSERT INTO orders (user_id, total, status, customer_name, customer_email, customer_phone, customer_address) VALUES (?, ?, \'pending\', ?, ?, ?, ?)',
-      [user_id, cart.total, customer_name, customer_email, customer_phone, customer_address]
+      'INSERT INTO orders (user_id, total, status, customer_name, customer_email, customer_phone, customer_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [user_id, cart.total, 'pending', customer_name, customer_email, customer_phone, customer_address]
     );
 
     const order_id = orderResult.insertId;
