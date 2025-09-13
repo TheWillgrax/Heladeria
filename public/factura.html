@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Factura - Heladería Victoria</title>
+  <link rel="stylesheet" href="/css/global.css"/>
+  <link rel="stylesheet" href="/css/factura.css"/>
+  <!-- Librería para generar PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <div id="header-placeholder"></div>
+  <main class="invoice-container">
+    <h2>Factura</h2>
+    <div id="invoice-meta"></div>
+    <section id="customer-info"></section>
+    <table class="invoice-table">
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th>Cantidad</th>
+          <th>Precio</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody id="invoice-items"></tbody>
+    </table>
+    <div class="invoice-total">Total: <span id="invoice-total">Q0.00</span></div>
+    <button id="download-invoice" class="btn">Descargar Factura</button>
+  </main>
+  <div id="footer-placeholder"></div>
+  <script src="/js/global.js"></script>
+  <script src="/js/factura.js"></script>
+</body>
+</html>

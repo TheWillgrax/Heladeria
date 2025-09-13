@@ -153,6 +153,18 @@ checkout.html — Página de Checkout Heladería Victoria
 
         if (res.ok) {
           alert('✅ Pedido realizado con éxito. ¡Gracias por tu compra!');
+
+          // Guardar información de la orden para generar la factura
+          const orderData = {
+            orderId: data.order_id,
+            total: data.total,
+            customer: { name, email, address },
+            items: cart,
+            createdAt: new Date().toISOString()
+          };
+          localStorage.setItem('lastOrder', JSON.stringify(orderData));
+
+          // Limpiar carrito y redirigir a la factura
           localStorage.removeItem('heladeriaCart');
           window.location.href = '/factura.html';
         } else {
