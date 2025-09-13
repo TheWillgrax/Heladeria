@@ -492,6 +492,55 @@ document.addEventListener('click', async e => {
 });
 
 // Funciones para manipular usuarios
+const btnAddUser = document.getElementById('btn-add-user');
+if (btnAddUser) {
+  btnAddUser.addEventListener('click', () => addUser());
+}
+
+async function addUser() {
+  const { token } = getAuth();
+
+  openModal(
+    'Agregar Usuario',
+    [
+      { name: 'name', label: 'Nombre', type: 'text', required: true },
+      { name: 'email', label: 'Email', type: 'email', required: true },
+      { name: 'password', label: 'Contraseña', type: 'password', required: true },
+      {
+        name: 'role',
+        label: 'Rol',
+        type: 'select',
+        value: 'customer',
+        options: [
+          { value: 'admin', text: 'Administrador' },
+          { value: 'customer', text: 'Cliente' }
+        ],
+        required: true
+      },
+      { name: 'phone', label: 'Teléfono', type: 'text' },
+      { name: 'address', label: 'Dirección', type: 'text' }
+    ],
+    async (data) => {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(data)
+      });
+
+      if (res.ok) {
+        alert('Usuario creado correctamente');
+        loadUsers();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || 'Error al crear el usuario');
+      }
+    }
+  );
+}
+
 async function editUser(userId) {
   const { token } = getAuth();
   
