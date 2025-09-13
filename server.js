@@ -734,7 +734,10 @@ app.get('/api/orders/:id', async (req, res) => {
     const orderId = req.params.id;
 
     const [orderRows] = await pool.query(
-      `SELECT o.*, u.name AS customer_name, u.email AS customer_email, u.address AS customer_address
+      `SELECT o.id, o.status, o.total, o.created_at,
+              COALESCE(o.customer_name, u.name) AS customer_name,
+              COALESCE(o.customer_email, u.email) AS customer_email,
+              COALESCE(o.customer_address, u.address) AS customer_address
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.id
        WHERE o.id = ?`,
