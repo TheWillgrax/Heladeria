@@ -17,7 +17,11 @@ function initStore() {
   initProducts();   // Configura listeners para ver detalles de productos
   initSearch();     // Configura la barra de búsqueda
   initCart();       // Inicializar funcionalidad del carrito
+  initFilters();    // Configura filtros y ordenamiento
 }
+
+// Almacena todos los productos obtenidos para aplicar filtros en memoria
+let allProducts = [];
 
 // --------------------------------------------------------------------------
 // Cargar productos desde la base de datos
@@ -37,10 +41,10 @@ async function loadProducts() {
   try {
     // Obtener productos desde la API
     const products = await fetchProducts();
-    
+
     // Limpiar el contenedor
     statusContainer.innerHTML = '';
-    
+
     if (products.length === 0) {
       statusContainer.innerHTML = `
         <div class="error-message">
@@ -51,9 +55,22 @@ async function loadProducts() {
       `;
       return;
     }
-    
-    // Renderizar productos
-    renderProducts(products);
+
+    // Guardar productos para aplicar filtros
+    allProducts = products;
+
+    // Ajustar el rango de precio máximo según los productos disponibles
+    const priceRange = document.getElementById('price-range');
+    const maxPriceValue = products.length ? Math.ceil(Math.max(...products.map(p => p.price))) : 0;
+    if (priceRange) {
+      priceRange.max = maxPriceValue;
+      priceRange.value = maxPriceValue;
+      const maxLabel = priceRange.parentElement.querySelector('.price-values span:last-child');
+      if (maxLabel) maxLabel.textContent = `Q${maxPriceValue}`;
+    }
+
+    // Renderizar productos aplicando filtros iniciales
+    applyFilters();
     
   } catch (error) {
     console.error('Error al cargar productos:', error);
@@ -252,19 +269,20 @@ async function performSearch(searchTerm) {
   
   try {
     const products = await fetchProducts(searchTerm);
-    
+
     // Limpiar el contenedor
     statusContainer.innerHTML = '';
-    
+
     if (products.length === 0) {
       showNoResultsMessage(true, searchTerm);
     } else {
-      const noResultsMessage = document.getElementById('no-results-message');  
+      const noResultsMessage = document.getElementById('no-results-message');
       if (noResultsMessage) noResultsMessage.remove();
     }
-    
-    // Renderizar resultados de búsqueda
-    renderProducts(products);
+
+    // Guardar y aplicar filtros sobre los resultados de búsqueda
+    allProducts = products;
+    applyFilters(searchTerm);
     
   } catch (error) {
     console.error('Error en búsqueda:', error);
@@ -298,7 +316,72 @@ function showNoResultsMessage(noResults, searchTerm) {
     <p>Intenta con otros términos de búsqueda.</p>  
   `;  
 
-  const storeHeader = document.querySelector('.store-header');  
-  if (storeHeader) storeHeader.insertAdjacentElement('afterend', message);  
-  else document.body.appendChild(message);  
+  const storeHeader = document.querySelector('.store-header');
+  if (storeHeader) storeHeader.insertAdjacentElement('afterend', message);
+  else document.body.appendChild(message);
+}
+
+// --------------------------------------------------------------------------
+// Configuración de filtros y ordenamiento
+// --------------------------------------------------------------------------
+function initFilters() {
+  const applyBtn = document.querySelector('.filter-actions button');
+  const priceRange = document.getElementById('price-range');
+
+  if (applyBtn) {
+    applyBtn.addEventListener('click', () => applyFilters());
+  }
+
+  // Mostrar el valor seleccionado del rango de precio
+  if (priceRange) {
+    const maxLabel = priceRange.parentElement.querySelector('.price-values span:last-child');
+    priceRange.addEventListener('input', () => {
+      if (maxLabel) maxLabel.textContent = `Q${priceRange.value}`;
+    });
+  }
+}
+
+// --------------------------------------------------------------------------
+// Aplica filtros de categoría, precio y ordenamiento
+// --------------------------------------------------------------------------
+function applyFilters(searchTerm = '') {
+  let filtered = [...allProducts];
+
+  // Filtrar por categoría
+  const selectedCategories = Array.from(document.querySelectorAll('input[name="category"]:checked')).map(c => c.value.toLowerCase());
+  if (selectedCategories.length > 0) {
+    filtered = filtered.filter(p => selectedCategories.includes((p.category_name || '').toLowerCase()));
+  }
+
+  // Filtrar por precio máximo
+  const priceRange = document.getElementById('price-range');
+  if (priceRange) {
+    const maxPrice = parseFloat(priceRange.value);
+    filtered = filtered.filter(p => p.price <= maxPrice);
+  }
+
+  // Ordenar resultados
+  const sortSelect = document.querySelector('.sort-select');
+  if (sortSelect) {
+    switch (sortSelect.value) {
+      case 'precio-low':
+        filtered.sort((a, b) => a.price - b.price);
+        break;
+      case 'precio-high':
+        filtered.sort((a, b) => b.price - a.price);
+        break;
+      case 'nombre':
+        filtered.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      default:
+        // 'popularidad' u otro valor: mantener orden original
+        break;
+    }
+  }
+
+  // Mostrar mensaje si no hay resultados tras aplicar filtros
+  showNoResultsMessage(filtered.length === 0, searchTerm || 'los filtros seleccionados');
+
+  // Renderizar productos filtrados
+  renderProducts(filtered);
 }
