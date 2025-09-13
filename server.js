@@ -563,6 +563,20 @@ app.post('/api/checkout', async (req, res) => {
   let cart = carts.get(sid);
   const user_id = null; // En una app real, obtendrías el user_id de la sesión o token
 
+  const {
+    customer_name,
+    customer_email,
+    customer_phone = null,
+    customer_address = null
+  } = req.body;
+
+  if (!customer_name || !customer_email) {
+    return res.status(400).json({
+      error: 'Datos incompletos',
+      message: 'customer_name y customer_email son requeridos'
+    });
+  }
+
   // Permitir que los items lleguen directamente en el cuerpo de la petición
   if (!cart || !cart.items.length) {
     if (Array.isArray(req.body.items) && req.body.items.length > 0) {
@@ -574,7 +588,6 @@ app.post('/api/checkout', async (req, res) => {
           quantity: Number(i.quantity) || 0
         }))
       };
-      cart.total = cart.items.reduce((sum, it) => sum + it.price * it.quantity, 0);
     }
   }
 
@@ -584,54 +597,63 @@ app.post('/api/checkout', async (req, res) => {
       message: 'No hay items en el carrito'
     });
   }
-  
+
   const conn = await pool.getConnection();
-  
+
   try {
     await conn.beginTransaction();
-    
-    // Verificar stock nuevamente antes de procesar la orden
+
+    // Verificar stock nuevamente antes de procesar la orden y obtener info del producto
     for (const item of cart.items) {
       const [rows] = await conn.query(
-        'SELECT stock FROM products WHERE id = ?',
+        'SELECT name, price, stock FROM products WHERE id = ?',
         [item.product_id]
       );
-      
+
       if (rows.length === 0) {
         throw new Error(`El producto ${item.product_id} no existe`);
       }
-      
-      if (rows[0].stock < item.quantity) {
-        throw new Error(`Stock insuficiente para ${item.name}. Solo quedan ${rows[0].stock} unidades`);
+
+      const product = rows[0];
+
+      if (product.stock < item.quantity) {
+        throw new Error(`Stock insuficiente para ${product.name}. Solo quedan ${product.stock} unidades`);
       }
+
+      // Asegurar que los datos del item coincidan con la base de datos
+      item.name = product.name;
+      item.price = Number(product.price);
     }
-    
+
+    // Recalcular total con precios de la base de datos
+    cart.total = cart.items.reduce((sum, it) => sum + it.price * it.quantity, 0);
+
     // Crear la orden
     const [orderResult] = await conn.query(
-      'INSERT INTO orders (user_id, total, status) VALUES (?, ?, "pending")',
-      [user_id, cart.total]
+      'INSERT INTO orders (user_id, total, status, customer_name, customer_email, customer_phone, customer_address) VALUES (?, ?, "pending", ?, ?, ?, ?)',
+      [user_id, cart.total, customer_name, customer_email, customer_phone, customer_address]
     );
-    
+
     const order_id = orderResult.insertId;
-    
+
     // Agregar items a la orden y actualizar stock
     for (const item of cart.items) {
       await conn.query(
-        'INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (?, ?, ?, ?)',
-        [order_id, item.product_id, item.quantity, item.price]
+        'INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price) VALUES (?, ?, ?, ?, ?)',
+        [order_id, item.product_id, item.name, item.quantity, item.price]
       );
-      
+
       await conn.query(
         'UPDATE products SET stock = stock - ? WHERE id = ?',
         [item.quantity, item.product_id]
       );
     }
-    
+
     await conn.commit();
-    
+
     // Limpiar carrito después de checkout exitoso
     carts.delete(sid);
-    
+
     res.status(201).json({
       order_id,
       total: cart.total,
@@ -641,9 +663,9 @@ app.post('/api/checkout', async (req, res) => {
   } catch (e) {
     await conn.rollback();
     console.error('Error en /api/checkout:', e);
-    res.status(500).json({ 
+    res.status(500).json({
       error: e.message,
-      message: 'Error al procesar la orden' 
+      message: 'Error al procesar la orden'
     });
   } finally {
     conn.release();
