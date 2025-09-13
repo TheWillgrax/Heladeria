@@ -489,10 +489,10 @@ app.patch('/api/cart/items/:product_id', (req, res) => {
     const sid = getSessionId(req);
     const { quantity } = req.body;
     
-    if (!quantity || quantity < 0) {
-      return res.status(400).json({ 
+    if (quantity == null || quantity < 0) {
+      return res.status(400).json({
         error: 'Cantidad inválida',
-        message: 'La cantidad debe ser un número positivo' 
+        message: 'La cantidad debe ser un número positivo'
       });
     }
     
@@ -630,7 +630,7 @@ app.post('/api/checkout', async (req, res) => {
 
     // Crear la orden
     const [orderResult] = await conn.query(
-      'INSERT INTO orders (user_id, total, status, customer_name, customer_email, customer_phone, customer_address) VALUES (?, ?, "pending", ?, ?, ?, ?)',
+      'INSERT INTO orders (user_id, total, status, customer_name, customer_email, customer_phone, customer_address) VALUES (?, ?, \'pending\', ?, ?, ?, ?)',
       [user_id, cart.total, customer_name, customer_email, customer_phone, customer_address]
     );
 
