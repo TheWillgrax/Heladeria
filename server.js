@@ -32,27 +32,30 @@ const dbConfig = {
   port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 4000,
   user: process.env.DB_USER || '9fPFVz5f8RypaAun.root',
   password: process.env.DB_PASSWORD || 'RhjlbnZE4akmMMZLr',
-  database: process.env.DB_NAME || 'heladeria_cdb',
+  database: process.env.DB_NAME || 'heladeria_db',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  charset: 'utf8mb4'
+  charset: 'utf8mb4',
+  // Habilitar SSL por defecto para conexiones seguras
+  ssl: { rejectUnauthorized: true }
 };
 
 if (process.env.DB_SSL_CA) {
   try {
     if (fs.existsSync(process.env.DB_SSL_CA)) {
       dbConfig.ssl = {
+        ...dbConfig.ssl,
         ca: fs.readFileSync(process.env.DB_SSL_CA)
       };
     } else {
       console.warn(
-        `Archivo de certificado no encontrado en ${process.env.DB_SSL_CA}. Continuando sin SSL.`
+        `Archivo de certificado no encontrado en ${process.env.DB_SSL_CA}. Continuando sin SSL personalizado.`
       );
     }
   } catch (error) {
     console.warn(
-      `No se pudo cargar el certificado SSL: ${error.message}. Continuando sin SSL.`
+      `No se pudo cargar el certificado SSL: ${error.message}. Continuando sin SSL personalizado.`
     );
   }
 }
