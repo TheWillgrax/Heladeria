@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>📊 Dashboard - Heladería Victoria</title>
+  <link rel="stylesheet" href="/css/global.css"/>
+  <link rel="stylesheet" href="/css/admin.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div id="header-placeholder" aria-hidden="true"></div>
+  <main class="account-shell">
+    <div class="account-title">DASHBOARD</div>
+    <section class="panel">
+      <h2 class="section-title"><i class="fas fa-chart-line"></i> Estadísticas</h2>
+      <div class="divider"></div>
+      <div class="card">
+        <form id="filters" class="grid-2" style="margin-bottom:1rem;">
+          <div class="row"><label>Desde</label><input type="date" id="from" class="input"/></div>
+          <div class="row"><label>Hasta</label><input type="date" id="to" class="input"/></div>
+        </form>
+        <div class="stats grid-4" style="margin-bottom:1rem; text-align:center;">
+          <div><strong id="stat-users">0</strong><div>Usuarios</div></div>
+          <div><strong id="stat-products">0</strong><div>Productos</div></div>
+          <div><strong id="stat-orders">0</strong><div>Pedidos</div></div>
+          <div><strong id="stat-sales">Q0.00</strong><div>Ventas</div></div>
+        </div>
+        <canvas id="salesChart" height="120"></canvas>
+      </div>
+    </section>
+  </main>
+  <div id="footer-placeholder" aria-hidden="true"></div>
+  <script src="/js/global.js"></script>
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

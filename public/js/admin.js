@@ -853,7 +853,7 @@ document.getElementById('btn-logout').addEventListener('click', e => {
   // Ocultar elementos de administración si no es admin
   if (user.role !== 'admin') {
     // Quitar elementos del menú
-    const adminMenuItems = menu.querySelectorAll('a[href="#usuarios"], a[href="#productos"]');
+    const adminMenuItems = menu.querySelectorAll('a.admin-only');
     adminMenuItems.forEach(item => item.remove());
 
     // Quitar leyenda de administración
