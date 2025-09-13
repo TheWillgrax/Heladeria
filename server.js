@@ -852,6 +852,37 @@ app.get('/api/verify', (req, res) => {
   }
 });
 
+// Endpoint del dashboard administrativo
+app.get('/api/admin/dashboard', requireAdmin, async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const fromDate = from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const toDate = to || new Date().toISOString().slice(0, 10);
+
+    const [[usersCount]] = await pool.query('SELECT COUNT(*) AS count FROM users');
+    const [[productsCount]] = await pool.query('SELECT COUNT(*) AS count FROM products');
+    const [[ordersStats]] = await pool.query(
+      'SELECT COUNT(*) AS count, COALESCE(SUM(total), 0) AS sales FROM orders WHERE DATE(created_at) BETWEEN ? AND ?',
+      [fromDate, toDate]
+    );
+    const [daily] = await pool.query(
+      'SELECT DATE(created_at) AS date, COALESCE(SUM(total), 0) AS total_sales FROM orders WHERE DATE(created_at) BETWEEN ? AND ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)',
+      [fromDate, toDate]
+    );
+
+    res.json({
+      users: usersCount.count,
+      products: productsCount.count,
+      orders: ordersStats.count,
+      sales: ordersStats.sales,
+      ordersDaily: daily
+    });
+  } catch (error) {
+    console.error('Error en /api/admin/dashboard:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
 // Endpoint para obtener todos los usuarios (solo admin)
 app.get('/api/users', requireAdmin, async (req, res) => {
   try {
