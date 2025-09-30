@@ -14,14 +14,44 @@
   <main class="account-shell">
     <div class="account-title">DASHBOARD</div>
     <section class="panel">
-      <h2 class="section-title"><i class="fas fa-chart-line"></i> Estadísticas y reportería</h2>
-      <div class="divider"></div>
+  <div class="section-header">
+        <h2 class="section-title"><i class="fas fa-chart-line"></i> Estadísticas y reportería</h2>
+      
+      </div>
+            <div class="divider"></div>
 
       <div class="card">
-        <form id="filters" class="grid-2" style="margin-bottom:1rem;">
-          <div class="row"><label>Desde</label><input type="date" id="from" class="input"/></div>
-          <div class="row"><label>Hasta</label><input type="date" id="to" class="input"/></div>
-        </form>
+     <div class="filters-grid">
+          <form id="filters" class="filters-form" autocomplete="off">
+            <div class="row"><label for="from">Desde</label><input type="date" id="from" class="input"/></div>
+            <div class="row"><label for="to">Hasta</label><input type="date" id="to" class="input"/></div>
+            <div class="row">
+              <label for="quickRange">Rango rápido</label>
+              <select id="quickRange" class="input">
+                <option value="7">Últimos 7 días</option>
+                <option value="30" selected>Últimos 30 días</option>
+                <option value="thisMonth">Mes en curso</option>
+                <option value="lastMonth">Mes anterior</option>
+                <option value="year">Año en curso</option>
+                <option value="custom">Personalizado</option>
+              </select>
+            </div>
+          </form>
+          <div class="export-actions" aria-label="Opciones de reportería">
+            <button type="button" id="refreshDashboard" class="action-btn" data-loading-text="Actualizando…">
+              <i class="fas fa-rotate-right"></i>
+              Actualizar
+            </button>
+            <button type="button" id="exportCsv" class="action-btn secondary" data-loading-text="Generando…">
+              <i class="fas fa-file-csv"></i>
+              CSV
+            </button>
+            <button type="button" id="exportJson" class="action-btn ghost" data-loading-text="Generando…">
+              <i class="fas fa-file-code"></i>
+              JSON
+            </button>
+          </div>
+        </div>
 
         <div class="stats-grid">
           <article class="stat-card">
@@ -126,5 +156,10 @@
   <div id="footer-placeholder" aria-hidden="true"></div>
   <script src="/js/global.js"></script>
   <script src="/js/dashboard.js"></script>
+  <!-- Al final del body, antes de </body> -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="/js/global.js"></script>
+<script src="/js/dashboard.js"></script>
+</body>
 </body>
 </html>

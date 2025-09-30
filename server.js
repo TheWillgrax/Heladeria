@@ -151,6 +151,7 @@ async function testConnection() {
 
         await ensureAdministrativeSchema(connection);
 
+
     
     // Verificar si las tablas necesarias existen
     const [productsTable] = await connection.query("SHOW TABLES LIKE 'products'");
@@ -942,128 +943,268 @@ app.get('/api/verify', (req, res) => {
   }
 });
 
+const normalizeDateRange = (from, to) => {
+  const isValid = value => {
+    if (!value) return false;
+    const parsed = new Date(value);
+    return !Number.isNaN(parsed.getTime());
+  };
+
+ const today = new Date();
+  const todayIso = today.toISOString().slice(0, 10);
+  const normalizedTo = isValid(to) ? to : todayIso;
+
+   let normalizedFrom;
+  if (isValid(from)) {
+    normalizedFrom = from;
+  } else {
+    const fallback = new Date(new Date(normalizedTo).getTime() - 29 * 24 * 60 * 60 * 1000);
+    normalizedFrom = fallback.toISOString().slice(0, 10);
+  }
+
+   if (new Date(normalizedFrom) > new Date(normalizedTo)) {
+    normalizedFrom = normalizedTo;
+  }
+
+  return { fromDate: normalizedFrom, toDate: normalizedTo };
+};
+  const getDashboardData = async (fromDate, toDate) => {
+  const [[usersCount]] = await pool.query('SELECT COUNT(*) AS count FROM users');
+  const [[productsCount]] = await pool.query('SELECT COUNT(*) AS count FROM products');
+  const [[ordersStats]] = await pool.query(
+    'SELECT COUNT(*) AS count, COALESCE(SUM(total), 0) AS sales FROM orders WHERE DATE(created_at) BETWEEN ? AND ?',
+    [fromDate, toDate]
+  );
+  const [[expensesStats]] = await pool.query(
+    'SELECT COALESCE(SUM(amount), 0) AS expenses FROM expenses WHERE DATE(incurred_at) BETWEEN ? AND ?',
+    [fromDate, toDate]
+  );
+  const [daily] = await pool.query(
+    'SELECT DATE(created_at) AS date, COALESCE(SUM(total), 0) AS total_sales FROM orders WHERE DATE(created_at) BETWEEN ? AND ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)',
+    [fromDate, toDate]
+  );
+  const [topProducts] = await pool.query(
+    `SELECT
+       oi.product_id,
+       COALESCE(oi.product_name, p.name) AS product_name,
+       SUM(oi.quantity) AS units_sold,
+       SUM(oi.quantity * oi.unit_price) AS revenue
+     FROM order_items oi
+     INNER JOIN orders o ON oi.order_id = o.id
+     LEFT JOIN products p ON oi.product_id = p.id
+     WHERE DATE(o.created_at) BETWEEN ? AND ?
+     GROUP BY oi.product_id, product_name
+     ORDER BY revenue DESC
+     LIMIT 5`,
+    [fromDate, toDate]
+  );
+
+  const [salesByCategory] = await pool.query(
+    `SELECT
+       COALESCE(c.name, 'Sin categoría') AS category,
+       SUM(oi.quantity * oi.unit_price) AS revenue
+     FROM order_items oi
+     INNER JOIN orders o ON oi.order_id = o.id
+     LEFT JOIN products p ON oi.product_id = p.id
+     LEFT JOIN categories c ON p.category_id = c.id
+     WHERE DATE(o.created_at) BETWEEN ? AND ?
+     GROUP BY category
+     ORDER BY revenue DESC`,
+    [fromDate, toDate]
+  );
+
+  const [monthlySales] = await pool.query(
+    `SELECT DATE_FORMAT(created_at, '%Y-%m') AS month, COALESCE(SUM(total), 0) AS sales, COUNT(*) AS orders
+     FROM orders
+     WHERE DATE(created_at) BETWEEN ? AND ?
+     GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+     ORDER BY month`,
+    [fromDate, toDate]
+  );
+
+  const [monthlyExpenses] = await pool.query(
+    `SELECT DATE_FORMAT(incurred_at, '%Y-%m') AS month, COALESCE(SUM(amount), 0) AS expenses
+     FROM expenses
+     WHERE DATE(incurred_at) BETWEEN ? AND ?
+     GROUP BY DATE_FORMAT(incurred_at, '%Y-%m')
+     ORDER BY month`,
+    [fromDate, toDate]
+  );
+
+  const expensesMap = new Map(monthlyExpenses.map(row => [row.month, Number(row.expenses)]));
+  const monthlyFinancial = monthlySales.map(row => ({
+    month: row.month,
+    sales: Number(row.sales),
+    expenses: Number(expensesMap.get(row.month) || 0),
+    orders: Number(row.orders)
+  }));
+
+  for (const expenseRow of monthlyExpenses) {
+    if (!monthlyFinancial.find(row => row.month === expenseRow.month)) {
+      monthlyFinancial.push({
+        month: expenseRow.month,
+        sales: 0,
+        expenses: Number(expenseRow.expenses),
+        orders: 0
+      });
+      }
+      }
+
+monthlyFinancial.sort((a, b) => a.month.localeCompare(b.month));
+
+  const totalSales = Number(ordersStats.sales || 0);
+  const totalOrders = Number(ordersStats.count || 0);
+  const totalExpenses = Number(expensesStats.expenses || 0);
+  const netIncome = totalSales - totalExpenses;
+  const averageTicket = totalOrders > 0 ? totalSales / totalOrders : 0;
+
+  return {
+    range: { from: fromDate, to: toDate },
+    users: Number(usersCount?.count || 0),
+    products: Number(productsCount?.count || 0),
+    orders: totalOrders,
+    sales: totalSales,
+    expenses: totalExpenses,
+    netIncome,
+    avgTicket: averageTicket,
+    ordersDaily: daily.map(row => ({
+      date: row.date,
+      total_sales: Number(row.total_sales || 0)
+    })),
+    topProducts: topProducts.map(row => ({
+      product_id: row.product_id,
+      product_name: row.product_name,
+      units_sold: Number(row.units_sold || 0),
+      revenue: Number(row.revenue || 0)
+    })),
+    salesByCategory: salesByCategory.map(row => ({
+      category: row.category,
+      revenue: Number(row.revenue || 0)
+    })),
+    monthlyFinancial: monthlyFinancial.map(item => ({
+      month: item.month,
+      sales: Number(item.sales || 0),
+      expenses: Number(item.expenses || 0),
+      orders: Number(item.orders || 0)
+    }))
+  };
+};
+
+const escapeCsvValue = value => {
+  if (value === null || value === undefined) {
+    return '""';
+  }
+
+      const stringValue = String(value).replace(/"/g, '""');
+  return `"${stringValue}"`;
+};
+
+const createDashboardCsv = (data) => {
+  const lines = [];
+  const formatCurrency = value => `Q${Number(value || 0).toFixed(2)}`;
+
+  lines.push(escapeCsvValue('Reporte Dashboard Heladería Victoria'));
+  lines.push(`${escapeCsvValue('Generado')},${escapeCsvValue(new Date().toISOString())}`);
+  lines.push('');
+  lines.push(`${escapeCsvValue('Periodo')},${escapeCsvValue('Desde')},${escapeCsvValue('Hasta')}`);
+  lines.push(`${escapeCsvValue('Rango seleccionado')},${escapeCsvValue(data.range.from)},${escapeCsvValue(data.range.to)}`);
+  lines.push('');
+  lines.push(`${escapeCsvValue('Indicador')},${escapeCsvValue('Valor')}`);
+  lines.push(`${escapeCsvValue('Usuarios activos')},${escapeCsvValue(data.users)}`);
+  lines.push(`${escapeCsvValue('Productos publicados')},${escapeCsvValue(data.products)}`);
+  lines.push(`${escapeCsvValue('Pedidos procesados')},${escapeCsvValue(data.orders)}`);
+  lines.push(`${escapeCsvValue('Ventas totales')},${escapeCsvValue(formatCurrency(data.sales))}`);
+  lines.push(`${escapeCsvValue('Gastos operativos')},${escapeCsvValue(formatCurrency(data.expenses))}`);
+  lines.push(`${escapeCsvValue('Utilidad neta')},${escapeCsvValue(formatCurrency(data.netIncome))}`);
+  lines.push(`${escapeCsvValue('Ticket promedio')},${escapeCsvValue(formatCurrency(data.avgTicket))}`);
+
+  lines.push('');
+  lines.push(escapeCsvValue('Ventas diarias'));
+  lines.push(`${escapeCsvValue('Fecha')},${escapeCsvValue('Ventas')}`);
+  if (data.ordersDaily.length === 0) {
+    lines.push(`${escapeCsvValue('Sin registros en el periodo')},${escapeCsvValue(formatCurrency(0))}`);
+  } else {
+    data.ordersDaily.forEach(item => {
+      lines.push(`${escapeCsvValue(item.date)},${escapeCsvValue(formatCurrency(item.total_sales))}`);
+    
+    });
+     }
+
+  lines.push('');
+  lines.push(escapeCsvValue('Resumen mensual'));
+  lines.push(`${escapeCsvValue('Mes')},${escapeCsvValue('Ventas')},${escapeCsvValue('Gastos')},${escapeCsvValue('Utilidad')},${escapeCsvValue('Pedidos')}`);
+  if (data.monthlyFinancial.length === 0) {
+    lines.push(`${escapeCsvValue('Sin datos')},${escapeCsvValue('0')},${escapeCsvValue('0')},${escapeCsvValue('0')},${escapeCsvValue('0')}`);
+  } else {
+    data.monthlyFinancial.forEach(item => {
+      const utilidad = Number(item.sales || 0) - Number(item.expenses || 0);
+      lines.push(`${escapeCsvValue(item.month)},${escapeCsvValue(formatCurrency(item.sales))},${escapeCsvValue(formatCurrency(item.expenses))},${escapeCsvValue(formatCurrency(utilidad))},${escapeCsvValue(item.orders)}`);
+    });
+  }
+
+  lines.push('');
+  lines.push(escapeCsvValue('Top productos'));
+  lines.push(`${escapeCsvValue('Producto')},${escapeCsvValue('Unidades vendidas')},${escapeCsvValue('Ingresos')}`);
+  if (data.topProducts.length === 0) {
+    lines.push(`${escapeCsvValue('Sin datos en el periodo')},${escapeCsvValue('0')},${escapeCsvValue('0.00')}`);
+  } else {
+    data.topProducts.forEach(item => {
+      lines.push(`${escapeCsvValue(item.product_name)},${escapeCsvValue(item.units_sold)},${escapeCsvValue(formatCurrency(item.revenue))}`);
+    });
+  }
+
+  lines.push('');
+  lines.push(escapeCsvValue('Ventas por categoría'));
+  lines.push(`${escapeCsvValue('Categoría')},${escapeCsvValue('Ingresos')}`);
+  if (data.salesByCategory.length === 0) {
+    lines.push(`${escapeCsvValue('Sin datos en el periodo')},${escapeCsvValue('0.00')}`);
+  } else {
+    data.salesByCategory.forEach(item => {
+      lines.push(`${escapeCsvValue(item.category)},${escapeCsvValue(formatCurrency(item.revenue))}`);
+    });
+  }
+
+  return lines.join('\n');
+};
+
 // Endpoint del dashboard administrativo
 app.get('/api/admin/dashboard', requireAdmin, async (req, res) => {
   try {
     const { from, to } = req.query;
-    const fromDate = from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const toDate = to || new Date().toISOString().slice(0, 10);
+    const { fromDate, toDate } = normalizeDateRange(from, to);
+    const data = await getDashboardData(fromDate, toDate);
 
-    const [[usersCount]] = await pool.query('SELECT COUNT(*) AS count FROM users');
-    const [[productsCount]] = await pool.query('SELECT COUNT(*) AS count FROM products');
-    const [[ordersStats]] = await pool.query(
-      'SELECT COUNT(*) AS count, COALESCE(SUM(total), 0) AS sales FROM orders WHERE DATE(created_at) BETWEEN ? AND ?',
-      [fromDate, toDate]
-    );
-    const [[expensesStats]] = await pool.query(
-      'SELECT COALESCE(SUM(amount), 0) AS expenses FROM expenses WHERE DATE(incurred_at) BETWEEN ? AND ?',
-      [fromDate, toDate]
-    );
-    const [daily] = await pool.query(
-      'SELECT DATE(created_at) AS date, COALESCE(SUM(total), 0) AS total_sales FROM orders WHERE DATE(created_at) BETWEEN ? AND ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)',
-      [fromDate, toDate]
-    );
-    const [topProducts] = await pool.query(
-      `SELECT
-         oi.product_id,
-         COALESCE(oi.product_name, p.name) AS product_name,
-         SUM(oi.quantity) AS units_sold,
-         SUM(oi.quantity * oi.unit_price) AS revenue
-       FROM order_items oi
-       INNER JOIN orders o ON oi.order_id = o.id
-       LEFT JOIN products p ON oi.product_id = p.id
-       WHERE DATE(o.created_at) BETWEEN ? AND ?
-       GROUP BY oi.product_id, product_name
-       ORDER BY revenue DESC
-       LIMIT 5`,
-      [fromDate, toDate]
-    );
-
-    const [salesByCategory] = await pool.query(
-      `SELECT
-         COALESCE(c.name, 'Sin categoría') AS category,
-         SUM(oi.quantity * oi.unit_price) AS revenue
-       FROM order_items oi
-       INNER JOIN orders o ON oi.order_id = o.id
-       LEFT JOIN products p ON oi.product_id = p.id
-       LEFT JOIN categories c ON p.category_id = c.id
-       WHERE DATE(o.created_at) BETWEEN ? AND ?
-       GROUP BY category
-       ORDER BY revenue DESC`,
-      [fromDate, toDate]
-    );
-
-    const [monthlySales] = await pool.query(
-      `SELECT DATE_FORMAT(created_at, '%Y-%m') AS month, COALESCE(SUM(total), 0) AS sales, COUNT(*) AS orders
-       FROM orders
-       WHERE DATE(created_at) BETWEEN ? AND ?
-       GROUP BY DATE_FORMAT(created_at, '%Y-%m')
-       ORDER BY month`,
-      [fromDate, toDate]
-    );
-
-    const [monthlyExpenses] = await pool.query(
-      `SELECT DATE_FORMAT(incurred_at, '%Y-%m') AS month, COALESCE(SUM(amount), 0) AS expenses
-       FROM expenses
-       WHERE DATE(incurred_at) BETWEEN ? AND ?
-       GROUP BY DATE_FORMAT(incurred_at, '%Y-%m')
-       ORDER BY month`,
-      [fromDate, toDate]
-    );
-
-    const expensesMap = new Map(monthlyExpenses.map(row => [row.month, Number(row.expenses)]));
-    const monthlyFinancial = monthlySales.map(row => ({
-      month: row.month,
-      sales: Number(row.sales),
-      expenses: Number(expensesMap.get(row.month) || 0),
-      orders: Number(row.orders)
-    }));
-
-    // Incluir meses con gastos pero sin ventas
-    for (const expenseRow of monthlyExpenses) {
-      if (!monthlyFinancial.find(row => row.month === expenseRow.month)) {
-        monthlyFinancial.push({
-          month: expenseRow.month,
-          sales: 0,
-          expenses: Number(expenseRow.expenses),
-          orders: 0
-        });
-      }
-    }
-
-    monthlyFinancial.sort((a, b) => a.month.localeCompare(b.month));
-
-    const totalSales = Number(ordersStats.sales);
-    const totalOrders = Number(ordersStats.count);
-    const totalExpenses = Number(expensesStats.expenses);
-    const netIncome = totalSales - totalExpenses;
-    const averageTicket = totalOrders > 0 ? totalSales / totalOrders : 0;
-
-    res.json({
-      users: usersCount.count,
-      products: productsCount.count,
-      orders: ordersStats.count,
-       sales: totalSales,
-      expenses: totalExpenses,
-      netIncome,
-      avgTicket: averageTicket,
-      ordersDaily: daily,
-      topProducts: topProducts.map(row => ({
-        product_id: row.product_id,
-        product_name: row.product_name,
-        units_sold: Number(row.units_sold),
-        revenue: Number(row.revenue)
-      })),
-      salesByCategory: salesByCategory.map(row => ({
-        category: row.category,
-        revenue: Number(row.revenue)
-      })),
-      monthlyFinancial
-    
-    });
+    res.json(data);
   } catch (error) {
     console.error('Error en /api/admin/dashboard:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+app.get('/api/admin/dashboard/export', requireAdmin, async (req, res) => {
+  try {
+    const { from, to, format = 'csv' } = req.query;
+    if (!['csv', 'json'].includes(format)) {
+      return res.status(400).json({ message: 'Formato de exportación no soportado' });
+    }
+
+    const { fromDate, toDate } = normalizeDateRange(from, to);
+    const data = await getDashboardData(fromDate, toDate);
+
+    if (format === 'json') {
+      res.setHeader('Content-Disposition', `attachment; filename="dashboard-report-${fromDate}-al-${toDate}.json"`);
+      return res.json({
+        generatedAt: new Date().toISOString(),
+        ...data
+      });
+    }
+
+    const csv = createDashboardCsv(data);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="dashboard-report-${fromDate}-al-${toDate}.csv"`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Error en /api/admin/dashboard/export:', error);
+    res.status(500).json({ message: 'No fue posible generar el reporte' });
   }
 });
 
@@ -1316,4 +1457,6 @@ app.listen(port, async () => {
   console.log(`   - POST http://localhost:${port}/api/checkout`);
   console.log(`   - CRUD http://localhost:${port}/api/users (solo admin)`);
   console.log(`   - CRUD http://localhost:${port}/api/products (solo admin)`);
+  console.log(`   - GET  http://localhost:${port}/api/admin/dashboard (requiere token admin)`);
+  console.log(`   - GET  http://localhost:${port}/api/admin/dashboard/export (requiere token admin)`);
 });
