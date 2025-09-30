@@ -62,24 +62,110 @@ const requireAdmin = async (req, res, next) => {
     res.status(401).json({ message: 'Token inválido o expirado' });
   }
 };
+async function initializeDatabase(connection) {
+  try {
+    // Primero verificar/crear tablas básicas
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        email VARCHAR(150) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        phone VARCHAR(30),
+        role ENUM('customer','admin') DEFAULT 'customer',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        description VARCHAR(255),
+        active TINYINT(1) DEFAULT 1
+      )
+    `);
+
+    // ... resto de CREATE TABLE básicos
+
+    // Luego ejecutar las modificaciones administrativas
+    await ensureAdministrativeSchema(connection);
+    
+  } catch (error) {
+    console.error('❌ Error inicializando base de datos:', error.message);
+    throw error;
+  }
+}
+
+// Garantizar que la base de datos cuente con las tablas necesarias para la reportería
+async function ensureAdministrativeSchema(connection) {
+  const ensureColumn = async (table, column, definition) => {
+    try {
+      const [columns] = await connection.query(`SHOW COLUMNS FROM \`${table}\` LIKE ?`, [column]);
+      if (columns.length === 0) {
+        // Asegurarnos de que la definición incluya el nombre de la columna
+        const fullDefinition = `${column} ${definition}`;
+        await connection.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
+        console.log(`🛠️ Columna "${column}" agregada a "${table}" para compatibilidad administrativa`);
+      }
+    } catch (error) {
+      console.error(`❌ Error agregando columna ${column} a ${table}:`, error.message);
+    }
+  };
+
+  try {
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS expenses (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        concept VARCHAR(255) NOT NULL,
+        category VARCHAR(120) DEFAULT 'General',
+        amount DECIMAL(12,2) NOT NULL,
+        incurred_at DATE NOT NULL,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_expenses_incurred_at (incurred_at),
+        INDEX idx_expenses_category (category)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    // Asegurar columnas opcionales utilizadas por la aplicación
+    await ensureColumn('users', 'address', 'VARCHAR(255) NULL');
+    await ensureColumn('orders', 'customer_name', 'VARCHAR(120) NULL');
+    await ensureColumn('orders', 'customer_email', 'VARCHAR(150) NULL');
+    await ensureColumn('orders', 'customer_phone', 'VARCHAR(40) NULL');
+    await ensureColumn('orders', 'customer_address', 'VARCHAR(255) NULL');
+    await ensureColumn('order_items', 'product_name', 'VARCHAR(150) NULL');
+    
+  } catch (error) {
+    console.error('❌ Error en ensureAdministrativeSchema:', error.message);
+  }
+}
+
 
 // Verificar conexión a la base de datos al iniciar
 async function testConnection() {
   try {
     const connection = await pool.getConnection();
     console.log('✅ Conectado a la base de datos MySQL');
+
+        await ensureAdministrativeSchema(connection);
+
     
     // Verificar si las tablas necesarias existen
     const [productsTable] = await connection.query("SHOW TABLES LIKE 'products'");
     const [categoriesTable] = await connection.query("SHOW TABLES LIKE 'categories'");
     const [usersTable] = await connection.query("SHOW TABLES LIKE 'users'");
-    
+    const [expensesTable] = await connection.query("SHOW TABLES LIKE 'expenses'");
+
     if (productsTable.length === 0) {
       console.warn('⚠️ La tabla "products" no existe en la base de datos');
     } else {
       console.log('✅ Tabla "products" encontrada');
     }
     
+   
+
     if (categoriesTable.length === 0) {
       console.warn('⚠️ La tabla "categories" no existe en la base de datos');
     } else {
@@ -91,7 +177,11 @@ async function testConnection() {
     } else {
       console.log('✅ Tabla "users" encontrada');
     }
-    
+     if (expensesTable.length === 0) {
+      console.warn('⚠️ La tabla "expenses" no existe en la base de datos');
+    } else {
+      console.log('✅ Tabla "expenses" encontrada (reportería)');
+    }
     connection.release();
   } catch (error) {
     console.error('❌ Error de conexión a la base de datos:', error.message);
@@ -865,17 +955,111 @@ app.get('/api/admin/dashboard', requireAdmin, async (req, res) => {
       'SELECT COUNT(*) AS count, COALESCE(SUM(total), 0) AS sales FROM orders WHERE DATE(created_at) BETWEEN ? AND ?',
       [fromDate, toDate]
     );
+    const [[expensesStats]] = await pool.query(
+      'SELECT COALESCE(SUM(amount), 0) AS expenses FROM expenses WHERE DATE(incurred_at) BETWEEN ? AND ?',
+      [fromDate, toDate]
+    );
     const [daily] = await pool.query(
       'SELECT DATE(created_at) AS date, COALESCE(SUM(total), 0) AS total_sales FROM orders WHERE DATE(created_at) BETWEEN ? AND ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)',
       [fromDate, toDate]
     );
+    const [topProducts] = await pool.query(
+      `SELECT
+         oi.product_id,
+         COALESCE(oi.product_name, p.name) AS product_name,
+         SUM(oi.quantity) AS units_sold,
+         SUM(oi.quantity * oi.unit_price) AS revenue
+       FROM order_items oi
+       INNER JOIN orders o ON oi.order_id = o.id
+       LEFT JOIN products p ON oi.product_id = p.id
+       WHERE DATE(o.created_at) BETWEEN ? AND ?
+       GROUP BY oi.product_id, product_name
+       ORDER BY revenue DESC
+       LIMIT 5`,
+      [fromDate, toDate]
+    );
+
+    const [salesByCategory] = await pool.query(
+      `SELECT
+         COALESCE(c.name, 'Sin categoría') AS category,
+         SUM(oi.quantity * oi.unit_price) AS revenue
+       FROM order_items oi
+       INNER JOIN orders o ON oi.order_id = o.id
+       LEFT JOIN products p ON oi.product_id = p.id
+       LEFT JOIN categories c ON p.category_id = c.id
+       WHERE DATE(o.created_at) BETWEEN ? AND ?
+       GROUP BY category
+       ORDER BY revenue DESC`,
+      [fromDate, toDate]
+    );
+
+    const [monthlySales] = await pool.query(
+      `SELECT DATE_FORMAT(created_at, '%Y-%m') AS month, COALESCE(SUM(total), 0) AS sales, COUNT(*) AS orders
+       FROM orders
+       WHERE DATE(created_at) BETWEEN ? AND ?
+       GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+       ORDER BY month`,
+      [fromDate, toDate]
+    );
+
+    const [monthlyExpenses] = await pool.query(
+      `SELECT DATE_FORMAT(incurred_at, '%Y-%m') AS month, COALESCE(SUM(amount), 0) AS expenses
+       FROM expenses
+       WHERE DATE(incurred_at) BETWEEN ? AND ?
+       GROUP BY DATE_FORMAT(incurred_at, '%Y-%m')
+       ORDER BY month`,
+      [fromDate, toDate]
+    );
+
+    const expensesMap = new Map(monthlyExpenses.map(row => [row.month, Number(row.expenses)]));
+    const monthlyFinancial = monthlySales.map(row => ({
+      month: row.month,
+      sales: Number(row.sales),
+      expenses: Number(expensesMap.get(row.month) || 0),
+      orders: Number(row.orders)
+    }));
+
+    // Incluir meses con gastos pero sin ventas
+    for (const expenseRow of monthlyExpenses) {
+      if (!monthlyFinancial.find(row => row.month === expenseRow.month)) {
+        monthlyFinancial.push({
+          month: expenseRow.month,
+          sales: 0,
+          expenses: Number(expenseRow.expenses),
+          orders: 0
+        });
+      }
+    }
+
+    monthlyFinancial.sort((a, b) => a.month.localeCompare(b.month));
+
+    const totalSales = Number(ordersStats.sales);
+    const totalOrders = Number(ordersStats.count);
+    const totalExpenses = Number(expensesStats.expenses);
+    const netIncome = totalSales - totalExpenses;
+    const averageTicket = totalOrders > 0 ? totalSales / totalOrders : 0;
 
     res.json({
       users: usersCount.count,
       products: productsCount.count,
       orders: ordersStats.count,
-      sales: ordersStats.sales,
-      ordersDaily: daily
+       sales: totalSales,
+      expenses: totalExpenses,
+      netIncome,
+      avgTicket: averageTicket,
+      ordersDaily: daily,
+      topProducts: topProducts.map(row => ({
+        product_id: row.product_id,
+        product_name: row.product_name,
+        units_sold: Number(row.units_sold),
+        revenue: Number(row.revenue)
+      })),
+      salesByCategory: salesByCategory.map(row => ({
+        category: row.category,
+        revenue: Number(row.revenue)
+      })),
+      monthlyFinancial
+    
     });
   } catch (error) {
     console.error('Error en /api/admin/dashboard:', error);

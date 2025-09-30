@@ -14,20 +14,112 @@
   <main class="account-shell">
     <div class="account-title">DASHBOARD</div>
     <section class="panel">
-      <h2 class="section-title"><i class="fas fa-chart-line"></i> Estadísticas</h2>
+      <h2 class="section-title"><i class="fas fa-chart-line"></i> Estadísticas y reportería</h2>
       <div class="divider"></div>
+
       <div class="card">
         <form id="filters" class="grid-2" style="margin-bottom:1rem;">
           <div class="row"><label>Desde</label><input type="date" id="from" class="input"/></div>
           <div class="row"><label>Hasta</label><input type="date" id="to" class="input"/></div>
         </form>
-        <div class="stats grid-4" style="margin-bottom:1rem; text-align:center;">
-          <div><strong id="stat-users">0</strong><div>Usuarios</div></div>
-          <div><strong id="stat-products">0</strong><div>Productos</div></div>
-          <div><strong id="stat-orders">0</strong><div>Pedidos</div></div>
-          <div><strong id="stat-sales">Q0.00</strong><div>Ventas</div></div>
+
+        <div class="stats-grid">
+          <article class="stat-card">
+            <span class="stat-label">Usuarios activos</span>
+            <strong id="stat-users" class="stat-value">0</strong>
+            <small class="stat-helper">Total de cuentas registradas</small>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Productos publicados</span>
+            <strong id="stat-products" class="stat-value">0</strong>
+            <small class="stat-helper">Inventario disponible en catálogo</small>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Pedidos procesados</span>
+            <strong id="stat-orders" class="stat-value">0</strong>
+            <small class="stat-helper">Órdenes dentro del periodo</small>
+          </article>
+          <article class="stat-card highlight">
+            <span class="stat-label">Ventas totales</span>
+            <strong id="stat-sales" class="stat-value">Q0.00</strong>
+            <small class="stat-helper">Ingresos brutos</small>
+          </article>
+          <article class="stat-card warning">
+            <span class="stat-label">Gastos operativos</span>
+            <strong id="stat-expenses" class="stat-value">Q0.00</strong>
+            <small class="stat-helper">Registros contables</small>
+          </article>
+          <article class="stat-card success">
+            <span class="stat-label">Utilidad neta</span>
+            <strong id="stat-net-income" class="stat-value">Q0.00</strong>
+            <small class="stat-helper">Ventas - Gastos</small>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Ticket promedio</span>
+            <strong id="stat-avg-ticket" class="stat-value">Q0.00</strong>
+            <small class="stat-helper">Promedio por pedido</small>
+          </article>
         </div>
-        <canvas id="salesChart" height="120"></canvas>
+      </div>
+
+      <div class="grid-2 dashboard-grid">
+        <div class="card">
+          <h3 class="card-title"><i class="fas fa-calendar-day"></i> Ventas diarias</h3>
+          <p class="card-helper">Seguimiento diario de ingresos confirmados</p>
+          <canvas id="salesChart" height="140" aria-label="Gráfico de ventas diarias"></canvas>
+        </div>
+        <div class="card">
+          <h3 class="card-title"><i class="fas fa-scale-balanced"></i> Ventas vs. gastos</h3>
+          <p class="card-helper">Comparativo mensual de ingresos y egresos</p>
+          <canvas id="financeChart" height="140" aria-label="Gráfico financiero mensual"></canvas>
+        </div>
+      </div>
+
+      <div class="grid-2 dashboard-grid">
+        <div class="card">
+          <h3 class="card-title"><i class="fas fa-pie-chart"></i> Ventas por categoría</h3>
+          <p class="card-helper">Distribución de ingresos por línea de producto</p>
+          <canvas id="categoryChart" height="200" aria-label="Gráfico de ventas por categoría"></canvas>
+        </div>
+        <div class="card">
+          <h3 class="card-title"><i class="fas fa-ice-cream"></i> Top productos</h3>
+          <p class="card-helper">Ranking de artículos más vendidos</p>
+          <div class="table-wrapper">
+            <table class="data-table" aria-label="Productos más vendidos">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Unidades</th>
+                  <th>Ingresos</th>
+                </tr>
+              </thead>
+              <tbody id="topProductsBody">
+                <tr><td colspan="3" class="muted">Sin datos en el periodo seleccionado</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title"><i class="fas fa-calendar-alt"></i> Resumen mensual</h3>
+        <p class="card-helper">Consolidado contable para control administrativo</p>
+        <div class="table-wrapper">
+          <table class="data-table" aria-label="Resumen mensual de ventas y gastos">
+            <thead>
+              <tr>
+                <th>Mes</th>
+                <th>Ventas</th>
+                <th>Gastos</th>
+                <th>Utilidad</th>
+                <th>Pedidos</th>
+              </tr>
+            </thead>
+            <tbody id="monthlySummaryBody">
+              <tr><td colspan="5" class="muted">Seleccione un rango de fechas para generar el reporte</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   </main>
