@@ -858,6 +858,518 @@ function createMonthlySummarySheet(workbook, data) {
   
   XLSX.utils.book_append_sheet(workbook, ws, '📆 Resumen Mensual');
 }
+// ============================================================================
+// EXPORTADOR EXCEL CON GRÁFICAS NATIVAS usando ExcelJS
+// ============================================================================
+
+/**
+ * Función principal para exportar dashboard a Excel con gráficas
+ */
+async function exportDashboardToExcelWithCharts() {
+  try {
+    const workbook = new ExcelJS.Workbook();
+    
+    // Configuración del libro
+    workbook.creator = 'Heladería Victoria';
+    workbook.created = new Date();
+    workbook.modified = new Date();
+    
+    // Obtener datos
+    const data = collectDashboardDataForExcel();
+    
+    // Crear hojas
+    await createSummarySheet(workbook, data);
+    await createDailySalesSheetWithChart(workbook, data);
+    await createFinancialSheetWithChart(workbook, data);
+    await createCategorySheetWithChart(workbook, data);
+    await createTopProductsSheet(workbook, data);
+    await createMonthlySheet(workbook, data);
+    
+    // Generar y descargar
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    });
+    
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Dashboard_Victoria_${getCurrentDateFormatted()}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    
+    showNotification('✅ Excel con gráficas generado correctamente', 'success');
+    
+  } catch (error) {
+    console.error('Error al exportar:', error);
+    showNotification('❌ Error al generar el Excel', 'error');
+  }
+}
+
+/**
+ * Recolectar datos del dashboard
+ */
+function collectDashboardDataForExcel() {
+  const stats = {
+    users: document.getElementById('stat-users')?.textContent || '0',
+    products: document.getElementById('stat-products')?.textContent || '0',
+    orders: document.getElementById('stat-orders')?.textContent || '0',
+    sales: document.getElementById('stat-sales')?.textContent || 'Q0.00',
+    expenses: document.getElementById('stat-expenses')?.textContent || 'Q0.00',
+    netIncome: document.getElementById('stat-net-income')?.textContent || 'Q0.00',
+    avgTicket: document.getElementById('stat-avg-ticket')?.textContent || 'Q0.00'
+  };
+  
+  return {
+    filters: {
+      from: document.getElementById('from')?.value || '',
+      to: document.getElementById('to')?.value || '',
+      range: document.getElementById('quickRange')?.selectedOptions[0]?.text || ''
+    },
+    stats,
+    dailySales: salesTrendChart?.data ? {
+      labels: salesTrendChart.data.labels || [],
+      values: salesTrendChart.data.datasets[0]?.data || []
+    } : { labels: [], values: [] },
+    financial: financeChart?.data ? {
+      labels: financeChart.data.labels || [],
+      sales: financeChart.data.datasets[0]?.data || [],
+      expenses: financeChart.data.datasets[1]?.data || []
+    } : { labels: [], sales: [], expenses: [] },
+    categories: categoryChart?.data ? {
+      labels: categoryChart.data.labels || [],
+      values: categoryChart.data.datasets[0]?.data || []
+    } : { labels: [], values: [] },
+    topProducts: extractTableData('topProductsBody'),
+    monthlySummary: extractTableData('monthlySummaryBody')
+  };
+}
+
+/**
+ * 1. Hoja: Resumen Ejecutivo
+ */
+async function createSummarySheet(workbook, data) {
+  const sheet = workbook.addWorksheet('📊 Resumen', {
+    views: [{ state: 'frozen', xSplit: 0, ySplit: 3 }]
+  });
+  
+  // Título principal
+  sheet.mergeCells('A1:D1');
+  const titleCell = sheet.getCell('A1');
+  titleCell.value = 'HELADERÍA VICTORIA - DASHBOARD EJECUTIVO';
+  titleCell.font = { size: 16, bold: true, color: { argb: 'FF2563EB' } };
+  titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  titleCell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFF0F9FF' }
+  };
+  
+  sheet.getRow(1).height = 30;
+  
+  // Información del reporte
+  sheet.addRow([]);
+  sheet.addRow(['Fecha de generación:', new Date().toLocaleString('es-GT')]);
+  sheet.addRow(['Período analizado:', `${data.filters.from} - ${data.filters.to}`]);
+  sheet.addRow(['Rango seleccionado:', data.filters.range]);
+  
+  // KPIs
+  sheet.addRow([]);
+  const kpiHeader = sheet.addRow(['INDICADORES CLAVE DE DESEMPEÑO']);
+  sheet.mergeCells(`A${kpiHeader.number}:D${kpiHeader.number}`);
+  kpiHeader.font = { size: 14, bold: true };
+  kpiHeader.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFE0F2FE' }
+  };
+  
+  sheet.addRow([]);
+  const headerRow = sheet.addRow(['📊 Métrica', 'Valor', 'Categoría', 'Estado']);
+  headerRow.font = { bold: true };
+  headerRow.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFDBEAFE' }
+  };
+  
+  // Datos con formato condicional
+  const metrics = [
+    ['Usuarios Activos', data.stats.users, 'Clientes', '✓'],
+    ['Productos Publicados', data.stats.products, 'Inventario', '✓'],
+    ['Pedidos Procesados', data.stats.orders, 'Operaciones', '✓'],
+    ['Ventas Totales', data.stats.sales, 'Ingresos', '💰'],
+    ['Gastos Operativos', data.stats.expenses, 'Egresos', '⚠️'],
+    ['Utilidad Neta', data.stats.netIncome, 'Finanzas', '✅'],
+    ['Ticket Promedio', data.stats.avgTicket, 'Ventas', '📈']
+  ];
+  
+  metrics.forEach(metric => {
+    const row = sheet.addRow(metric);
+    row.getCell(2).font = { bold: true, color: { argb: 'FF2563EB' } };
+  });
+  
+  // Ajustar anchos
+  sheet.getColumn(1).width = 25;
+  sheet.getColumn(2).width = 18;
+  sheet.getColumn(3).width = 15;
+  sheet.getColumn(4).width = 10;
+  
+  // Bordes
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber > 8) {
+      row.eachCell(cell => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
+    }
+  });
+}
+
+/**
+ * 2. Hoja: Ventas Diarias CON GRÁFICA
+ */
+async function createDailySalesSheetWithChart(workbook, data) {
+  const sheet = workbook.addWorksheet('📅 Ventas Diarias');
+  
+  // Título
+  sheet.mergeCells('A1:C1');
+  const title = sheet.getCell('A1');
+  title.value = 'VENTAS DIARIAS';
+  title.font = { size: 14, bold: true };
+  title.alignment = { horizontal: 'center' };
+  
+  sheet.addRow([]);
+  
+  // Headers
+  const headers = sheet.addRow(['Fecha', 'Ventas', 'Tendencia']);
+  headers.font = { bold: true };
+  headers.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFDBEAFE' }
+  };
+  
+  // Datos
+  const startRow = 4;
+  data.dailySales.labels.forEach((label, i) => {
+    sheet.addRow([
+      label,
+      data.dailySales.values[i] || 0,
+      i > 0 ? (data.dailySales.values[i] >= data.dailySales.values[i-1] ? '↑' : '↓') : '-'
+    ]);
+  });
+  
+  const endRow = startRow + data.dailySales.labels.length - 1;
+  
+  // Aplicar formato de moneda
+  for (let i = startRow; i <= endRow; i++) {
+    sheet.getCell(`B${i}`).numFmt = '"Q"#,##0.00';
+  }
+  
+  // CREAR GRÁFICA
+  if (data.dailySales.labels.length > 0) {
+    sheet.addRow([]);
+    sheet.addRow([]);
+    
+    // Imagen de la gráfica (si tienes Chart.js)
+    const chartImage = await captureChartAsImage('salesChart');
+    if (chartImage) {
+      const imageId = workbook.addImage({
+        base64: chartImage,
+        extension: 'png'
+      });
+      
+      sheet.addImage(imageId, {
+        tl: { col: 4, row: 2 },
+        ext: { width: 500, height: 300 }
+      });
+    }
+  }
+  
+  sheet.getColumn(1).width = 15;
+  sheet.getColumn(2).width = 15;
+  sheet.getColumn(3).width = 12;
+}
+
+/**
+ * 3. Hoja: Comparativo Financiero CON GRÁFICA
+ */
+async function createFinancialSheetWithChart(workbook, data) {
+  const sheet = workbook.addWorksheet('💰 Financiero');
+  
+  sheet.mergeCells('A1:E1');
+  const title = sheet.getCell('A1');
+  title.value = 'COMPARATIVO VENTAS VS GASTOS';
+  title.font = { size: 14, bold: true };
+  title.alignment = { horizontal: 'center' };
+  
+  sheet.addRow([]);
+  
+  const headers = sheet.addRow(['Período', 'Ventas', 'Gastos', 'Utilidad', 'Margen %']);
+  headers.font = { bold: true };
+  headers.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFD1FAE5' }
+  };
+  
+  const startRow = 4;
+  data.financial.labels.forEach((label, i) => {
+    const sales = data.financial.sales[i] || 0;
+    const expenses = data.financial.expenses[i] || 0;
+    const profit = sales - expenses;
+    const margin = sales > 0 ? (profit / sales) * 100 : 0;
+    
+    const row = sheet.addRow([label, sales, expenses, profit, margin / 100]);
+    
+    row.getCell(2).numFmt = '"Q"#,##0.00';
+    row.getCell(3).numFmt = '"Q"#,##0.00';
+    row.getCell(4).numFmt = '"Q"#,##0.00';
+    row.getCell(5).numFmt = '0.00%';
+    
+    // Color condicional
+    if (profit < 0) {
+      row.getCell(4).font = { color: { argb: 'FFDC2626' } };
+    } else {
+      row.getCell(4).font = { color: { argb: 'FF16A34A' } };
+    }
+  });
+  
+  // Gráfica
+  const chartImage = await captureChartAsImage('financeChart');
+  if (chartImage) {
+    const imageId = workbook.addImage({
+      base64: chartImage,
+      extension: 'png'
+    });
+    
+    sheet.addImage(imageId, {
+      tl: { col: 6, row: 2 },
+      ext: { width: 500, height: 300 }
+    });
+  }
+  
+  sheet.getColumn(1).width = 15;
+  sheet.getColumn(2).width = 15;
+  sheet.getColumn(3).width = 15;
+  sheet.getColumn(4).width = 15;
+  sheet.getColumn(5).width = 12;
+}
+
+/**
+ * 4. Hoja: Categorías CON GRÁFICA
+ */
+async function createCategorySheetWithChart(workbook, data) {
+  const sheet = workbook.addWorksheet('🍦 Categorías');
+  
+  sheet.mergeCells('A1:D1');
+  const title = sheet.getCell('A1');
+  title.value = 'VENTAS POR CATEGORÍA';
+  title.font = { size: 14, bold: true };
+  title.alignment = { horizontal: 'center' };
+  
+  sheet.addRow([]);
+  
+  const headers = sheet.addRow(['Categoría', 'Ventas', 'Porcentaje', 'Ranking']);
+  headers.font = { bold: true };
+  headers.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFFEF3C7' }
+  };
+  
+  const total = data.categories.values.reduce((sum, val) => sum + val, 0);
+  
+  data.categories.labels.forEach((label, i) => {
+    const value = data.categories.values[i] || 0;
+    const percentage = total > 0 ? value / total : 0;
+    
+    const row = sheet.addRow([label, value, percentage, i + 1]);
+    row.getCell(2).numFmt = '"Q"#,##0.00';
+    row.getCell(3).numFmt = '0.00%';
+  });
+  
+  // Gráfica de dona
+  const chartImage = await captureChartAsImage('categoryChart');
+  if (chartImage) {
+    const imageId = workbook.addImage({
+      base64: chartImage,
+      extension: 'png'
+    });
+    
+    sheet.addImage(imageId, {
+      tl: { col: 5, row: 2 },
+      ext: { width: 400, height: 400 }
+    });
+  }
+  
+  sheet.getColumn(1).width = 25;
+  sheet.getColumn(2).width = 15;
+  sheet.getColumn(3).width = 12;
+  sheet.getColumn(4).width = 10;
+}
+
+/**
+ * 5. Top Productos
+ */
+async function createTopProductsSheet(workbook, data) {
+  const sheet = workbook.addWorksheet('🏆 Top Productos');
+  
+  sheet.mergeCells('A1:D1');
+  const title = sheet.getCell('A1');
+  title.value = 'TOP PRODUCTOS MÁS VENDIDOS';
+  title.font = { size: 14, bold: true };
+  title.alignment = { horizontal: 'center' };
+  
+  sheet.addRow([]);
+  
+  const headers = sheet.addRow(['#', 'Producto', 'Unidades', 'Ingresos']);
+  headers.font = { bold: true };
+  
+  data.topProducts.forEach((product, i) => {
+    const row = sheet.addRow([
+      i + 1,
+      product[0] || '',
+      product[1] || '',
+      product[2] || ''
+    ]);
+    
+    // Destacar top 3
+    if (i < 3) {
+      row.font = { bold: true };
+      row.getCell(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: i === 0 ? 'FFFBBF24' : i === 1 ? 'FFBFDBFE' : 'FFFED7AA' }
+      };
+    }
+  });
+  
+  sheet.getColumn(1).width = 5;
+  sheet.getColumn(2).width = 35;
+  sheet.getColumn(3).width = 15;
+  sheet.getColumn(4).width = 15;
+}
+
+/**
+ * 6. Resumen Mensual
+ */
+async function createMonthlySheet(workbook, data) {
+  const sheet = workbook.addWorksheet('📆 Mensual');
+  
+  sheet.mergeCells('A1:F1');
+  const title = sheet.getCell('A1');
+  title.value = 'RESUMEN MENSUAL';
+  title.font = { size: 14, bold: true };
+  title.alignment = { horizontal: 'center' };
+  
+  sheet.addRow([]);
+  
+  const headers = sheet.addRow(['Mes', 'Ventas', 'Gastos', 'Utilidad', 'Pedidos', 'Margen %']);
+  headers.font = { bold: true };
+  
+  data.monthlySummary.forEach(row => {
+    sheet.addRow(row);
+  });
+  
+  sheet.getColumn(1).width = 15;
+  sheet.getColumn(2).width = 15;
+  sheet.getColumn(3).width = 15;
+  sheet.getColumn(4).width = 15;
+  sheet.getColumn(5).width = 12;
+  sheet.getColumn(6).width = 12;
+}
+
+/**
+ * CAPTURAR GRÁFICA COMO IMAGEN
+ */
+async function captureChartAsImage(chartId) {
+  try {
+    const canvas = document.getElementById(chartId);
+    if (!canvas) return null;
+    
+    // Convertir canvas a base64
+    const base64 = canvas.toDataURL('image/png').split(',')[1];
+    return base64;
+  } catch (error) {
+    console.error('Error al capturar gráfica:', error);
+    return null;
+  }
+}
+
+/**
+ * FUNCIONES AUXILIARES
+ */
+function extractTableData(tableBodyId) {
+  const tbody = document.getElementById(tableBodyId);
+  if (!tbody) return [];
+  
+  const rows = [];
+  const trs = tbody.querySelectorAll('tr');
+  
+  trs.forEach(tr => {
+    const cells = tr.querySelectorAll('td');
+    if (cells.length > 0 && !tr.textContent.includes('Sin datos')) {
+      const rowData = Array.from(cells).map(cell => cell.textContent.trim());
+      rows.push(rowData);
+    }
+  });
+  
+  return rows;
+}
+
+function getCurrentDateFormatted() {
+  const now = new Date();
+  return now.toISOString().replace(/[:.]/g, '-').slice(0, -5);
+}
+
+function showNotification(message, type) {
+  // Implementación simple
+  const color = type === 'success' ? '#16a34a' : '#dc2626';
+  const notification = document.createElement('div');
+  notification.textContent = message;
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: ${color};
+    color: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    z-index: 9999;
+    font-weight: 500;
+  `;
+  document.body.appendChild(notification);
+  setTimeout(() => notification.remove(), 3000);
+}
+
+// ============================================================================
+// INTEGRACIÓN EN TU HTML
+// ============================================================================
+
+// Agregar botón en tu HTML:
+/*
+<button type="button" id="exportExcelCharts" class="action-btn">
+  <i class="fas fa-file-excel"></i>
+  Excel con Gráficas
+</button>
+*/
+
+// Event listener
+document.addEventListener('DOMContentLoaded', () => {
+  const exportBtn = document.getElementById('exportExcelCharts');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', exportDashboardToExcelWithCharts);
+  }
+});
 
 /**
  * FUNCIONES AUXILIARES

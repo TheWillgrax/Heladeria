@@ -7,21 +7,58 @@
   <link rel="stylesheet" href="/css/global.css"/>
   <link rel="stylesheet" href="/css/admin.css"/>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Estilos adicionales para el nuevo botón -->
+  <style>
+    .action-btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .action-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+    }
+    
+    .action-btn i {
+      font-size: 16px;
+    }
+    
+    .action-btn[aria-busy="true"] {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+    
+    .export-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+  </style>
 </head>
 <body>
   <div id="header-placeholder" aria-hidden="true"></div>
   <main class="account-shell">
     <div class="account-title">DASHBOARD</div>
     <section class="panel">
-  <div class="section-header">
+      <div class="section-header">
         <h2 class="section-title"><i class="fas fa-chart-line"></i> Estadísticas y reportería</h2>
-      
       </div>
-            <div class="divider"></div>
+      <div class="divider"></div>
 
       <div class="card">
-     <div class="filters-grid">
+        <div class="filters-grid">
           <form id="filters" class="filters-form" autocomplete="off">
             <div class="row"><label for="from">Desde</label><input type="date" id="from" class="input"/></div>
             <div class="row"><label for="to">Hasta</label><input type="date" id="to" class="input"/></div>
@@ -37,15 +74,26 @@
               </select>
             </div>
           </form>
+
+          <!-- ✅ Nuevo bloque de exportación -->
           <div class="export-actions" aria-label="Opciones de reportería">
             <button type="button" id="refreshDashboard" class="action-btn" data-loading-text="Actualizando…">
               <i class="fas fa-rotate-right"></i>
               Actualizar
             </button>
+            
+            <!-- NUEVO: Botón Excel con Gráficas -->
+            <button type="button" id="exportExcelCharts" class="action-btn" data-loading-text="Generando…" 
+                    title="Descargar Excel completo con gráficas embebidas">
+              <i class="fas fa-file-excel"></i>
+              Excel con Gráficas
+            </button>
+            
             <button type="button" id="exportCsv" class="action-btn secondary" data-loading-text="Generando…">
               <i class="fas fa-file-csv"></i>
               CSV
             </button>
+            
             <button type="button" id="exportJson" class="action-btn ghost" data-loading-text="Generando…">
               <i class="fas fa-file-code"></i>
               JSON
@@ -157,9 +205,8 @@
   <script src="/js/global.js"></script>
   <script src="/js/dashboard.js"></script>
   <!-- Al final del body, antes de </body> -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="/js/global.js"></script>
-<script src="/js/dashboard.js"></script>
-</body>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="/js/global.js"></script>
+  <script src="/js/dashboard.js"></script>
 </body>
 </html>
